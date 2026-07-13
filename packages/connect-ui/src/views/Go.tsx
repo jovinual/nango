@@ -21,7 +21,7 @@ import { telemetry } from '@/lib/telemetry';
 import { cn, compactErrorDisplay, getAllowedCallbackOrigin, jsonSchemaToZod } from '@/lib/utils';
 
 import type { AuthResult } from '@nangohq/frontend';
-import type { AuthModeType } from '@nangohq/types';
+import type { AuthModeType, SimplifiedJSONSchema } from '@nangohq/types';
 import type { InputHTMLAttributes } from 'react';
 import type { Resolver } from 'react-hook-form';
 
@@ -108,6 +108,17 @@ export const Go: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [connectionFailed, setConnectionFailed] = useState(false);
     const [showErrorDetails, setShowErrorDetails] = useState(false);
+
+    const integrationConfigFallbackFields = useMemo<Record<string, SimplifiedJSONSchema>>(() => {
+        if (!provider || provider.auth_mode !== 'TWO_STEP') {
+            return {};
+        }
+        return Object.fromEntries(
+            Object.entries(provider.integration_config ?? {})
+                .filter(([name]) => !(provider.credentials && name in provider.credentials))
+                .map(([name, schema]) => [name, { ...schema, optional: false }])
+        );
+    }, [provider]);
 
     const preconfiguredParams = session && integration ? session.integrations_config_defaults?.[integration.unique_key]?.connection_config || {} : {};
     const initialExternalId = useMemo(() => {
@@ -208,8 +219,13 @@ export const Go: React.FC = () => {
         }
 
         // Modify base form with credentials specific
-        for (const [name, schema] of Object.entries(provider.credentials || [])) {
+        for (const [name, schema] of Object.entries({ ...provider.credentials, ...integrationConfigFallbackFields })) {
             if (schema.automated) {
+                continue;
+            }
+
+            // Already set at the integration level (integration_config) — don't ask the end user for it.
+            if (integration?.preconfigured_credentials?.includes(name)) {
                 continue;
             }
 
@@ -292,7 +308,7 @@ export const Go: React.FC = () => {
             resolver,
             orderedFields: Object.entries(orderedFields).sort((a, b) => (a[1] < b[1] ? -1 : 1))
         };
-    }, [provider, preconfiguredParams]);
+    }, [provider, integration, preconfiguredParams, integrationConfigFallbackFields]);
 
     const form = useForm<z.infer<(typeof formSchema)['API_KEY']>>({
         resolver: resolver,
@@ -629,7 +645,9 @@ export const Go: React.FC = () => {
                                     const [type, key] = name.split('.') as ['credentials' | 'params' | 'assertion_option', string];
 
                                     const definition =
-                                        provider[type === 'credentials' ? 'credentials' : type === 'params' ? 'connection_config' : 'assertion_option']?.[key];
+                                        type === 'credentials'
+                                            ? (provider.credentials?.[key] ?? integrationConfigFallbackFields[key])
+                                            : provider[type === 'params' ? 'connection_config' : 'assertion_option']?.[key];
                                     // Not all fields have a definition in providers.yaml so we fallback to default
                                     const base = name in defaultConfiguration ? defaultConfiguration[name] : undefined;
                                     const labelOverride = type === 'credentials' ? integration?.credentials_label?.[key] : undefined;

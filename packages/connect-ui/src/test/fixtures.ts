@@ -41,6 +41,37 @@ export const apiKeyProvider = {
 
 export const providerResponse = { data: apiKeyProvider } satisfies GetPublicProvider['Success'];
 
+// TWO_STEP provider with a `clientId` declared only in `integration_config` — it doubles as a per-connection
+// credential fallback (see Go.tsx), asked from the end user only when the integration hasn't preconfigured it.
+export const twoStepProvider = {
+    auth_mode: 'TWO_STEP',
+    display_name: 'Sage Intacct',
+    docs: 'https://docs.example.com/sage-intacct',
+    name: 'sage-intacct-cc',
+    logo_url: 'https://app.nango.dev/images/template-logos/sage-intacct-cc.svg',
+    token_response: { token: 'access_token' },
+    credentials: {
+        username: { type: 'string', title: 'Username', description: 'Username', automated: false, order: 2 }
+    },
+    integration_config: {
+        clientId: { type: 'string', title: 'Client ID', description: 'Client ID', automated: false, optional: true, order: 1 }
+    }
+} satisfies GetPublicProvider['Success']['data'];
+
+export const twoStepIntegrationFixture: GetPublicIntegration['Success']['data'] = {
+    ...integrationFixture,
+    unique_key: 'sage-intacct-cc',
+    provider: 'sage-intacct-cc',
+    display_name: 'Sage Intacct',
+    preconfigured_credentials: ['clientId']
+};
+
+// Same integration, but with nothing preconfigured — used to assert the field renders by default.
+export const twoStepIntegrationFixtureNoPreconfig: GetPublicIntegration['Success']['data'] = {
+    ...twoStepIntegrationFixture,
+    preconfigured_credentials: undefined
+};
+
 export const authResultFixture = {
     providerConfigKey: 'github',
     connectionId: 'conn_test_123'
